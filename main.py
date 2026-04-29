@@ -3,20 +3,40 @@ from langchain_openai import ChatOpenAI
 import  os
 from dotenv import load_dotenv
 
-if __name__ == "__main__":
+def main():
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     if api_key:
         print("OPENAI_API_KEY: 已設定")
     else:
         print("OPENAI_API_KEY: 未設定")
-    return
+        return
 
-load_dotenv()
+    model_name = os.getenv("MODEL_NAME")
+    if model_name:
+        print("MODEL_NAME: 已設定")
+    else:
+        print("MODEL_NAME: 未設定")
+        return
 
-def main():
-    api_key = os.getenv("OPENAI_API_KEY")
-    print(api_key)
+    base_url = os.getenv("BASE_URL")
+    if base_url:
+        print("BASE_URL: 已設定")
+    else:
+        print("BASE_URL: 未設定")
+        return
+   
+    llm = ChatOpenAI(
+        model=model_name,
+        base_url=base_url,
+        api_key=api_key
+    )
+
+    human_message = "how are you?"
+    
+    ai_message =llm.invoke(human_message)
+    print(ai_message.content)
+
     #agent_name = "河馬先生"
     #print(api_key)
     #print(f"我是{agent_name} 我是一顆蛋")
