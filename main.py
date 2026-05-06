@@ -36,7 +36,7 @@ def main():
     messages = []
     
     while True:
-        input_message = input("You: ").strip()
+        input_message = input("\nYou: ").strip()
         if not input_message:
             continue
         
@@ -57,18 +57,9 @@ def main():
         messages.append(human_message)
         messages.append(assistant_message)
 
-        if input_message == "STOP":
+        if input_message.upper() == "STOP":
             print("結束掰掰")
             break
-    
-        ai_message =llm.invoke(input_message)
-        print(ai_message.content)
-
-        for chunk in llm.stream(input_message):
-            print(chunk.content, end="", flush=True)
-
-        messages.append(human_message)
-        messages.append(assistant_message)
 
         
 
@@ -76,9 +67,6 @@ def main():
     #print(api_key)
     #print(f"我是{agent_name} 我是一顆蛋")
 
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-import os
 
 if __name__ == "__main__":
     main()
