@@ -32,10 +32,18 @@ def main():
         api_key=api_key
     )
 
-    human_message = "how are you?"
     
-    ai_message =llm.invoke(human_message)
-    print(ai_message.content)
+    while True:
+        input_message = input("You: ").strip()
+        if not input_message:
+            continue
+
+        if input_message == "STOP":
+            print("結束掰掰")
+            break
+    
+        ai_message =llm.invoke(input_message)
+        print(ai_message.content)
 
     #agent_name = "河馬先生"
     #print(api_key)
