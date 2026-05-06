@@ -1,5 +1,6 @@
 
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, AIMessage
 import  os
 from dotenv import load_dotenv
 
@@ -32,11 +33,29 @@ def main():
         api_key=api_key
     )
 
+    messages = []
     
     while True:
         input_message = input("You: ").strip()
         if not input_message:
             continue
+        
+        human_message = HumanMessage(content=input_message)
+        context_messages =[*messages, human_message]
+
+        print("助手：", end="", flush=True)
+        reply_parts: list[str] = []
+        for chunk in llm.stream(context_messages):
+            if chunk.content:
+                print(chunk.content, end="", flush=True)
+                reply_parts.append(chunk.content)
+        print()
+
+        assistant_text = "".join(reply_parts)
+        assistant_message = AIMessage(content=assistant_text)
+
+        messages.append(human_message)
+        messages.append(assistant_message)
 
         if input_message == "STOP":
             print("結束掰掰")
@@ -47,6 +66,10 @@ def main():
 
         for chunk in llm.stream(input_message):
             print(chunk.content, end="", flush=True)
+
+        messages.append(human_message)
+        messages.append(assistant_message)
+
         
 
     #agent_name = "河馬先生"
