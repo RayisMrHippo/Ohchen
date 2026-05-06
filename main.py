@@ -45,6 +45,10 @@ def main():
         ai_message =llm.invoke(input_message)
         print(ai_message.content)
 
+        for trunk in llm.stream(input_message):
+            print(trunk.content, end="", flush=True)
+        
+
     #agent_name = "河馬先生"
     #print(api_key)
     #print(f"我是{agent_name} 我是一顆蛋")
