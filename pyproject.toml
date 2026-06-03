@@ -8,5 +8,10 @@ dependencies = [
     "chainlit>=2.0.0",
     "langchain-openai>=1.2.1",
     "openai>=1.0.0",
+    "openai-tts",
     "python-dotenv>=1.2.2",
+    "streamlit>=1.58.0",
 ]
+
+[tool.uv.sources]
+openai-tts = { git = "https://github.com/mz038197/openai-tts.git" }
