@@ -1,0 +1,38 @@
+{
+  "my_profile": {
+    "my_tone": "我講話挺直接的 會罵一些髒話 我很愛笑",
+    "my_personality": "不是很想把氣氛搞很僵 但我個性蠻衝的",
+    "my_habit": "我不會打太多字  口頭禪: 沒力 超好笑 幹 靠杯 靠邀 他媽的 媽的 機掰 可憐 幹林老師",
+    "my_note": "希望可以幫我找一些理由 像是去找老師 跟別人去廁所 到回收"
+  },
+  "people": [
+    {
+      "name": "觀光胖子",
+      "personality": "很盧 很霸道 很吵 一點都不好笑 沒有朋友 所以只能一直來找我跟另一個朋友",
+      "relationship": "同校朋友",
+      "importance_to_me": "低",
+      "importance_to_them": "高",
+      "note": "她會一直盧我 叫我跟他去做我不願意做的事 很討厭 然後我跟別人聊天 他很愛在旁邊裝熟 讓整個氣氛很尷尬 他卻不以為然"
+    },
+    {
+      "name": "陳鈞睿",
+      "personality": "很像河馬",
+      "relationship": "同校好朋友",
+      "importance_to_me": "高",
+      "importance_to_them": "高",
+      "note": "他會跟我一起笑同學是河馬先生 然後跟我一起耍北爛 還會跟我一起賭錢\n我會跟他說 河馬 柯玉 河馬先生 瓜優"
+    }
+  ],
+  "selected_person_name": "陳鈞睿",
+  "request_text": "他問我假日要不要吃飯 但我要補習 時間不能配合",
+  "tone": "打嘴砲版",
+  "length_mode": "超短版",
+  "chat_context": "",
+  "generated_replies": [
+    "不要鬧 我才不要",
+    "你自己去啦笑死",
+    "先不要 我又不是你女友",
+    "改天啦 白痴",
+    "今天不行啦 笑你"
+  ]
+}
