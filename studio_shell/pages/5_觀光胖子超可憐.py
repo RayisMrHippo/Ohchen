@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import html
+import json
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SHELL_ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +45,19 @@ TONE_OPTIONS = [
 
 LENGTH_OPTIONS = ["超短版", "正常版", "帶理由版"]
 
+REFRESH_TONE_ORDER = [
+    "婉拒版",
+    "直接拒絕",
+    "有界線但不想吵",
+    "拿理由推掉",
+    "敷衍一下",
+    "好朋友怕尷尬版",
+    "不爽但先忍",
+    "打嘴砲版",
+    "偏兇一點",
+    "罵髒話版",
+]
+
 
 
 def build_style_hint(my_profile: dict[str, str]) -> dict[str, str]:
@@ -58,6 +77,132 @@ def dedupe_keep_order(lines: list[str]) -> list[str]:
         if cleaned and cleaned not in result:
             result.append(cleaned)
     return result
+
+
+
+def rotated_tone(base_tone: str, refresh_count: int) -> str:
+    if refresh_count <= 0:
+        return base_tone
+
+    tones = [base_tone] + [tone for tone in REFRESH_TONE_ORDER if tone != base_tone]
+    return tones[refresh_count % len(tones)]
+
+
+
+def pick_five_different(lines: list[str], rejected_replies: list[str], refresh_count: int) -> list[str]:
+    rejected = set(rejected_replies)
+    candidates = [line for line in dedupe_keep_order(lines) if line not in rejected]
+    if not candidates:
+        candidates = dedupe_keep_order(lines)
+
+    if not candidates:
+        return []
+
+    offset = (refresh_count * 2) % len(candidates)
+    rotated = candidates[offset:] + candidates[:offset]
+    return rotated[:5]
+
+
+
+def render_reply_actions(reply: str, idx: int) -> None:
+    js_reply = json.dumps(reply, ensure_ascii=False)
+    line_url = "https://line.me/R/share?text=" + urllib.parse.quote(reply)
+    safe_line_url = html.escape(line_url, quote=True)
+
+    components.html(
+        f"""
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin:-4px 0 18px;">
+          <button id="copy-{idx}" style="border:1px solid #d0d7de; border-radius:8px; background:#fff; padding:8px 12px; cursor:pointer;">
+            複製
+          </button>
+          <button id="share-{idx}" style="border:1px solid #d0d7de; border-radius:8px; background:#fff; padding:8px 12px; cursor:pointer;">
+            手機分享
+          </button>
+          <a href="{safe_line_url}" target="_blank" rel="noopener noreferrer"
+             style="border:1px solid #06c755; border-radius:8px; color:#06c755; background:#fff; padding:8px 12px; text-decoration:none; font:14px sans-serif;">
+            LINE
+          </a>
+          <span id="status-{idx}" style="align-self:center; color:#57606a; font:13px sans-serif;"></span>
+        </div>
+        <script>
+        const reply{idx} = {js_reply};
+        const status{idx} = document.getElementById("status-{idx}");
+        document.getElementById("copy-{idx}").onclick = async () => {{
+          try {{
+            await navigator.clipboard.writeText(reply{idx});
+            status{idx}.textContent = "已複製";
+          }} catch (error) {{
+            status{idx}.textContent = "請長按上方文字複製";
+          }}
+        }};
+        document.getElementById("share-{idx}").onclick = async () => {{
+          if (navigator.share) {{
+            try {{
+              await navigator.share({{ text: reply{idx} }});
+              status{idx}.textContent = "已開啟分享";
+            }} catch (error) {{
+              status{idx}.textContent = "";
+            }}
+          }} else {{
+            try {{
+              await navigator.clipboard.writeText(reply{idx});
+              status{idx}.textContent = "此裝置不支援分享，已先複製";
+            }} catch (error) {{
+              status{idx}.textContent = "此裝置不支援分享";
+            }}
+          }}
+        }};
+        </script>
+        """,
+        height=58,
+    )
+
+
+
+def is_discord_webhook_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url.strip())
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc in {"discord.com", "discordapp.com"}
+        and parsed.path.startswith("/api/webhooks/")
+    )
+
+
+
+def send_to_discord_webhook(webhook_url: str, reply: str, username: str) -> tuple[bool, str]:
+    webhook_url = webhook_url.strip()
+    if not is_discord_webhook_url(webhook_url):
+        return False, "Discord Webhook URL 格式不對。"
+
+    payload = {
+        "content": reply[:2000],
+        "username": username.strip() or "Reply Helper",
+        "allowed_mentions": {"parse": []},
+    }
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        webhook_url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "AgentStudioReplyHelper/1.0",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            if 200 <= response.status < 300:
+                return True, "已送到 Discord。"
+            return False, f"Discord 回傳狀態碼：{response.status}"
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        detail = body[:180] if body else str(exc)
+        return False, f"Discord 傳送失敗：{detail}"
+    except urllib.error.URLError as exc:
+        return False, f"連線到 Discord 失敗：{exc.reason}"
+    except TimeoutError:
+        return False, "連線到 Discord 逾時。"
 
 
 
@@ -81,6 +226,8 @@ def generate_replies(
     tone: str,
     chat_context: str,
     length_mode: str,
+    rejected_replies: list[str] | None = None,
+    refresh_count: int = 0,
 ) -> list[str]:
     relationship = (person.get("relationship") or "").strip()
     importance_to_me = (person.get("importance_to_me") or "").strip()
@@ -177,9 +324,10 @@ def generate_replies(
         },
     }
 
-    lines = list(tone_map.get(tone, tone_map["直接拒絕"]).get(length_mode, []))
+    effective_tone = rotated_tone(tone, refresh_count)
+    lines = list(tone_map.get(effective_tone, tone_map["直接拒絕"]).get(length_mode, []))
 
-    if close_friend and tone in {"婉拒版", "好朋友怕尷尬版"}:
+    if close_friend and effective_tone in {"婉拒版", "好朋友怕尷尬版"}:
         if length_mode == "超短版":
             lines += ["改天我補你", "下次再一起"]
         elif length_mode == "正常版":
@@ -187,7 +335,7 @@ def generate_replies(
         else:
             lines += ["改天我補你 這次真的時間對不上", "下次再一起 我這次真的沒辦法"]
 
-    if close_friend and tone == "打嘴砲版":
+    if close_friend and effective_tone == "打嘴砲版":
         if length_mode == "超短版":
             lines += ["下次再嘴你", "改天再陪你鬧"]
         elif length_mode == "正常版":
@@ -201,13 +349,13 @@ def generate_replies(
             "我不是已經說沒空了嗎",
         ]
 
-    if importance_to_me == "高" and tone in {"敷衍一下", "婉拒版", "好朋友怕尷尬版", "有界線但不想吵"} and length_mode != "超短版":
+    if importance_to_me == "高" and effective_tone in {"敷衍一下", "婉拒版", "好朋友怕尷尬版", "有界線但不想吵"} and length_mode != "超短版":
         lines += [
             "不是在兇你 但我真的不想",
             "我只是這次真的不想去",
         ]
 
-    if relationship and tone == "拿理由推掉" and length_mode == "帶理由版":
+    if relationship and effective_tone == "拿理由推掉" and length_mode == "帶理由版":
         lines += [
             "我真的有事 先不陪了",
             "今天先放過我",
@@ -219,19 +367,19 @@ def generate_replies(
             "今天真的沒想跟人出去",
         ]
 
-    if sweary and tone in {"不爽但先忍", "偏兇一點", "罵髒話版"}:
+    if sweary and effective_tone in {"不爽但先忍", "偏兇一點", "罵髒話版"}:
         if length_mode == "超短版":
             lines += ["幹 我不要", "靠 不要再問"]
         else:
             lines += ["幹 我今天真的不想", "靠 我就說不要了"]
 
-    if my_note and "理由" in my_note and tone != "拿理由推掉" and length_mode == "帶理由版":
+    if my_note and "理由" in my_note and effective_tone != "拿理由推掉" and length_mode == "帶理由版":
         lines += [
             "我等等真的有事",
             "我等一下要先閃",
         ]
 
-    if request_text and length_mode == "帶理由版" and tone in {"直接拒絕", "有界線但不想吵", "好朋友怕尷尬版"}:
+    if request_text and length_mode == "帶理由版" and effective_tone in {"直接拒絕", "有界線但不想吵", "好朋友怕尷尬版"}:
         lines += [
             "這個我先不要 我今天不想",
             "那個我真的不想答應",
@@ -240,7 +388,19 @@ def generate_replies(
     if likes_short:
         lines = [line.replace("我現在沒有要去", "我現在不要") for line in lines]
 
-    return dedupe_keep_order(lines)[:5]
+    if refresh_count > 0:
+        lines += [
+            "算了我這次真的不要 你不用等我",
+            "我換個說法 我今天就是不想去",
+            "這個我不接 你找別人比較快",
+            "我今天先收掉 不想再討論這個",
+            "我不要把話講太重 但答案是不行",
+            "今天不約 我想把時間留給自己",
+            "我這次不跟 你自己安排就好",
+            "我已經決定不去了 不用再問我",
+        ]
+
+    return pick_five_different(lines, rejected_replies or [], refresh_count)
 
 
 
@@ -263,6 +423,21 @@ def render_main() -> str:
     generated_replies = state.get("generated_replies", [])
     if not isinstance(generated_replies, list):
         generated_replies = []
+    rejected_replies = state.get("rejected_replies", [])
+    if not isinstance(rejected_replies, list):
+        rejected_replies = []
+    refresh_count = state.get("refresh_count", 0)
+    if not isinstance(refresh_count, int):
+        refresh_count = 0
+    discord_webhook_url = state.get("discord_webhook_url", "")
+    if not isinstance(discord_webhook_url, str):
+        discord_webhook_url = ""
+    discord_username = state.get("discord_username", "Reply Helper")
+    if not isinstance(discord_username, str):
+        discord_username = "Reply Helper"
+    remember_discord_webhook = state.get("remember_discord_webhook", False) is True
+    if "tourist_discord_webhook_url" not in st.session_state:
+        st.session_state.tourist_discord_webhook_url = discord_webhook_url
 
     if tone_default not in TONE_OPTIONS:
         tone_default = TONE_OPTIONS[0]
@@ -345,6 +520,11 @@ def render_main() -> str:
                         "length_mode": length_mode,
                         "chat_context": chat_context,
                         "generated_replies": generated_replies,
+                        "rejected_replies": rejected_replies,
+                        "refresh_count": refresh_count,
+                        "discord_webhook_url": discord_webhook_url if remember_discord_webhook else "",
+                        "discord_username": discord_username,
+                        "remember_discord_webhook": remember_discord_webhook,
                     },
                     shell_root=SHELL_ROOT,
                 )
@@ -390,6 +570,47 @@ def render_main() -> str:
         height=130,
     )
 
+    with st.expander("Discord 傳送設定", expanded=False):
+        st.caption("填入 Discord 頻道的 Webhook URL 後，每個回答都可以一鍵送到那個頻道。Webhook URL 可以發訊息到該頻道，請不要公開截圖或貼給別人。")
+        st.info(
+            "Webhook 不在 Discord 個人設定裡。請用 Discord 桌面版或網頁版，到「伺服器設定」→「整合」→「Webhooks」建立。"
+            "如果你找不到這個選項，通常代表你不是伺服器管理員、沒有「管理 Webhook」權限，或你想傳的是私人訊息/群組 DM。"
+        )
+        discord_webhook_url = st.text_input(
+            "Discord Webhook URL",
+            type="password",
+            placeholder="https://discord.com/api/webhooks/...",
+            key="tourist_discord_webhook_url",
+        )
+        discord_username = st.text_input(
+            "Discord 顯示名稱",
+            value=discord_username,
+            placeholder="Reply Helper",
+        )
+        remember_discord_webhook = st.checkbox(
+            "記住 webhook 到本機資料檔",
+            value=remember_discord_webhook,
+            help="關閉時，重新整理或換頁期間通常仍可用，但不會寫進這頁的 JSON 資料檔。",
+        )
+
+        test_col1, test_col2 = st.columns([1, 2])
+        with test_col1:
+            if st.button("測試 Discord", use_container_width=True):
+                if not discord_webhook_url.strip():
+                    st.warning("請先貼上 Discord Webhook URL。")
+                else:
+                    ok, message = send_to_discord_webhook(
+                        discord_webhook_url,
+                        "Discord 傳送測試：如果你看到這則訊息，代表設定成功。",
+                        discord_username,
+                    )
+                    if ok:
+                        st.success(message)
+                    else:
+                        st.error(message)
+        with test_col2:
+            st.caption("Discord Webhook 會送到指定頻道；如果要傳私人訊息，仍需要 Discord Bot 與使用者授權。")
+
     selector_col1, selector_col2 = st.columns(2)
     with selector_col1:
         tone_index = TONE_OPTIONS.index(tone_default)
@@ -398,8 +619,33 @@ def render_main() -> str:
         length_index = LENGTH_OPTIONS.index(length_mode)
         length_mode = st.radio("回覆長度", LENGTH_OPTIONS, index=length_index)
 
-    if st.button("生成 5 個回答", use_container_width=True):
-        generated_replies = generate_replies(my_profile, selected_person, request_text, tone, chat_context, length_mode)
+    action_col1, action_col2 = st.columns(2)
+    with action_col1:
+        if st.button("生成 5 個回答", use_container_width=True):
+            refresh_count = 0
+            rejected_replies = []
+            generated_replies = generate_replies(
+                my_profile,
+                selected_person,
+                request_text,
+                tone,
+                chat_context,
+                length_mode,
+            )
+    with action_col2:
+        if st.button("這 5 個我都不要，換一批", use_container_width=True, disabled=not generated_replies):
+            rejected_replies = dedupe_keep_order(rejected_replies + generated_replies)
+            refresh_count += 1
+            generated_replies = generate_replies(
+                my_profile,
+                selected_person,
+                request_text,
+                tone,
+                chat_context,
+                length_mode,
+                rejected_replies=rejected_replies,
+                refresh_count=refresh_count,
+            )
 
     save_page_data(
         PAGE_NAME,
@@ -412,6 +658,11 @@ def render_main() -> str:
             "length_mode": length_mode,
             "chat_context": chat_context,
             "generated_replies": generated_replies,
+            "rejected_replies": rejected_replies,
+            "refresh_count": refresh_count,
+            "discord_webhook_url": discord_webhook_url if remember_discord_webhook else "",
+            "discord_username": discord_username,
+            "remember_discord_webhook": remember_discord_webhook,
         },
         shell_root=SHELL_ROOT,
     )
@@ -419,9 +670,25 @@ def render_main() -> str:
     st.divider()
     st.markdown("#### 可直接回的短句")
     if generated_replies:
+        if refresh_count:
+            st.caption(f"已換第 {refresh_count + 1} 批，這批會避開前面被你按掉的回答。")
         for idx, reply in enumerate(generated_replies, start=1):
             st.markdown(f"**選項 {idx}**")
             st.code(reply, language="text")
+            render_reply_actions(reply, idx)
+            if st.button(
+                "傳到 Discord",
+                key=f"discord_send_{idx}_{refresh_count}",
+                use_container_width=True,
+            ):
+                if not discord_webhook_url.strip():
+                    st.warning("請先到「Discord 傳送設定」貼上 Webhook URL。")
+                else:
+                    ok, message = send_to_discord_webhook(discord_webhook_url, reply, discord_username)
+                    if ok:
+                        st.success(f"選項 {idx}：{message}")
+                    else:
+                        st.error(f"選項 {idx}：{message}")
     else:
         st.info("先選人物、填對話情境，再按「生成 5 個回答」。")
 
@@ -437,6 +704,8 @@ def render_main() -> str:
         回覆語氣=tone,
         回覆長度=length_mode,
         生成回答數量=len(generated_replies),
+        已刷新批次=refresh_count,
+        已排除回答數=len(rejected_replies),
     )
     st.code(extra, language="text")
 

@@ -23,16 +23,21 @@
       "note": "他會跟我一起笑同學是河馬先生 然後跟我一起耍北爛 還會跟我一起賭錢\n我會跟他說 河馬 柯玉 河馬先生 瓜優"
     }
   ],
-  "selected_person_name": "陳鈞睿",
-  "request_text": "他問我假日要不要吃飯 但我要補習 時間不能配合",
-  "tone": "打嘴砲版",
-  "length_mode": "超短版",
+  "selected_person_name": "觀光胖子",
+  "request_text": "他要求我跟他去福利社\n",
+  "tone": "偏兇一點",
+  "length_mode": "正常版",
   "chat_context": "",
   "generated_replies": [
-    "不要鬧 我才不要",
-    "你自己去啦笑死",
-    "先不要 我又不是你女友",
-    "改天啦 白痴",
-    "今天不行啦 笑你"
-  ]
+    "我就不要 不要再問了",
+    "你自己去 我沒差",
+    "不要再盧了 很煩",
+    "我沒空理這個 先這樣",
+    "你找別人 我不去"
+  ],
+  "rejected_replies": [],
+  "refresh_count": 0,
+  "discord_webhook_url": "https://discordapp.com/api/webhooks/1516715705595330640/Yibg0fX-4NxmEodlAHYy_g0rXJxjuqy0wNELV0p3YAbsiLUnxVTqk0IpIEqpv-ibtUjr",
+  "discord_username": "Reply Helper",
+  "remember_discord_webhook": true
 }
