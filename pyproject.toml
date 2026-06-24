@@ -6,11 +6,14 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chainlit>=2.0.0",
+    "discord.py>=2.6.0",
     "langchain-openai>=1.2.1",
     "openai>=1.0.0",
     "openai-tts",
     "peas-agent-core",
+    "python-docx",
     "python-dotenv>=1.2.2",
+    "python-pptx",
     "st-multimodal-chatinput>=0.2.1",
     "streamlit>=1.58.0",
 ]

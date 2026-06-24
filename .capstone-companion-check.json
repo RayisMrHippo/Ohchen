@@ -1,0 +1,13 @@
+{
+  "vcr-imagegen": "ok",
+  "pptx": "ok",
+  "vcr_key": "missing",
+  "node": "ok",
+  "pptxgenjs": "missing",
+  "playwright": "install_failed",
+  "sharp": "missing",
+  "python_pptx": "install_failed",
+  "python_docx": "install_failed",
+  "checked_at": "2026-06-24T16:50:00",
+  "project_agents_path": ".agents/skills/"
+}

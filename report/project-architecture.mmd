@@ -1,0 +1,33 @@
+flowchart LR
+  subgraph left [左欄網頁]
+    Profile["我的個人小卡片"]
+    Person["對方小卡片"]
+    Context["對話情境與想要語氣"]
+    Replies["五種回覆選項"]
+    Share["複製、分享、傳到 Discord"]
+    Summary["整理成 Agent 摘要"]
+  end
+
+  subgraph right [右欄 AI 助手]
+    Panel["聊天面板"]
+    Brain["AI 回覆大腦"]
+  end
+
+  subgraph store [資料存放]
+    PageData["小卡片與設定檔"]
+    DiscordInbox["Discord 收件匣"]
+    Webhook["Discord 頻道"]
+  end
+
+  Profile --> Summary
+  Person --> Summary
+  Context --> Summary
+  Summary -->|"每則問題附上左欄情境"| Panel
+  Panel --> Brain
+  Brain -->|"依照人物關係與語氣產生回覆"| Replies
+  Replies --> Share
+  Share -->|"使用者確認後送出"| Webhook
+  Profile -->|"儲存個人設定"| PageData
+  Person -->|"儲存對方資料"| PageData
+  PageData -->|"重新打開頁面時讀取"| Profile
+  DiscordInbox -->|"進階功能：帶入別人訊息"| Context

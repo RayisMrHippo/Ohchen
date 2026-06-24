@@ -17,6 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from studio_shell.page_shell import page_shell
+from studio_shell.discord_inbox import default_inbox_path, format_context, list_recent_messages, mark_handled
 from studio_shell.shell_ui import (
     format_extra_context,
     inject_style,
@@ -438,6 +439,10 @@ def render_main() -> str:
     remember_discord_webhook = state.get("remember_discord_webhook", False) is True
     if "tourist_discord_webhook_url" not in st.session_state:
         st.session_state.tourist_discord_webhook_url = discord_webhook_url
+    if "tourist_request_text" not in st.session_state:
+        st.session_state.tourist_request_text = request_text
+    if "tourist_chat_context" not in st.session_state:
+        st.session_state.tourist_chat_context = chat_context
 
     if tone_default not in TONE_OPTIONS:
         tone_default = TONE_OPTIONS[0]
@@ -555,19 +560,65 @@ def render_main() -> str:
         selected_person = {}
         st.info("你還沒有新增人物，先建立一個。")
 
+    inbox_path = default_inbox_path(SHELL_ROOT)
+    discord_messages = list_recent_messages(inbox_path, limit=12, include_handled=True)
+    with st.expander("Discord 收件匣", expanded=False):
+        st.caption(
+            "背景監聽程式收到的訊息會出現在這裡。點一則訊息後，會自動帶入對話情境並產生回覆草稿；送出仍需要你自己按「傳到 Discord」。"
+        )
+        st.code(str(inbox_path), language="text")
+        if not discord_messages:
+            st.info("目前還沒有收到 Discord 訊息。啟動 discord_listener.py 後，新訊息會寫到這裡。")
+        else:
+            for message in discord_messages:
+                message_id = str(message.get("id", ""))
+                author = message.get("author_name") or "Unknown"
+                content = message.get("content") or ""
+                created_at = message.get("created_at") or ""
+                handled = "已處理" if message.get("handled") else "未處理"
+                with st.container(border=True):
+                    st.markdown(f"**{author}** · {handled}")
+                    st.caption(created_at)
+                    st.write(content)
+                    col_apply, col_done = st.columns(2)
+                    with col_apply:
+                        if st.button("帶入並生成草稿", key=f"discord_apply_{message_id}", use_container_width=True):
+                            context_messages = discord_messages[:6]
+                            request_text = str(content)
+                            chat_context = format_context(context_messages)
+                            st.session_state.tourist_request_text = request_text
+                            st.session_state.tourist_chat_context = chat_context
+                            refresh_count = 0
+                            rejected_replies = []
+                            generated_replies = generate_replies(
+                                my_profile,
+                                selected_person,
+                                request_text,
+                                tone_default,
+                                chat_context,
+                                length_mode,
+                            )
+                            mark_handled(inbox_path, message_id, handled=True)
+                            st.success("已帶入這則 Discord 訊息，並生成回覆草稿。")
+                    with col_done:
+                        done_label = "標成未處理" if message.get("handled") else "標成已處理"
+                        if st.button(done_label, key=f"discord_done_{message_id}", use_container_width=True):
+                            mark_handled(inbox_path, message_id, handled=not bool(message.get("handled")))
+                            st.rerun()
+
     st.divider()
     st.markdown("#### 對話情境")
     request_text = st.text_area(
         "對方要求",
-        value=request_text,
         placeholder="例如：他問我假日要不要吃飯，但我要補習，時間不能配合",
         height=100,
+        key="tourist_request_text",
     )
     chat_context = st.text_area(
         "聊天紀錄 / 對話內容",
-        value=chat_context,
         placeholder="例如：我都跟他說今天不行、沒空、要跟別人走，但他還是一直問",
         height=130,
+        key="tourist_chat_context",
     )
 
     with st.expander("Discord 傳送設定", expanded=False):
